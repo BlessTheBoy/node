@@ -82,8 +82,6 @@ const unifiedServer = function (req, res) {
     // Choose the handler this request should go to. If none, send to the not-found handler
     const choosenHandler = router[trimmedPath] || handlers.notFound;
 
-    console.log("queryStringObject", queryStringObject);
-
     // Construct the data object to send to the handler
     const data = {
       trimmedPath,
@@ -91,6 +89,7 @@ const unifiedServer = function (req, res) {
       method,
       headers,
       payload: helpers.parseJsonToObject(payload),
+      req
     };
 
     // Route the request to the handlers specified in the router.
@@ -115,4 +114,6 @@ const unifiedServer = function (req, res) {
 const router = {
   ping: handlers.ping,
   users: handlers.users,
+  tokens: handlers.tokens,
+  checks: handlers.checks
 };

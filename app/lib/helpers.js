@@ -42,4 +42,8 @@ helpers.parseJsonToObject = (string) => {
   }
 };
 
+helpers.createRandomString = function (length) {
+  return crypto.randomBytes(length ?? 16).toString("hex");
+};
+
 export default helpers;
