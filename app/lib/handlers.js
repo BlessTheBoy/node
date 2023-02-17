@@ -157,7 +157,6 @@ handlers._users.put = function (data, callback) {
 
 // Users - delete
 // required fields: phone
-// TODO: Cleanup (delete) any other file associated with the user
 handlers._users.delete = function (data, callback) {
   const phone = data.queryStringObject.get("phone");
   if (phone?.trim()?.length === 10) {
@@ -168,10 +167,23 @@ handlers._users.delete = function (data, callback) {
       if (valid) {
         // lookup the user
         read("users", phone)
-          .then((data) => {
+          .then((userData) => {
             // remove the user object
             deleteFile("users", phone)
               .then(() => {
+                let checkDeletionError = 0;
+                userData.checks?.forEach((check) => {
+                  deleteFile("checks", check).catch((err) => {
+                    checkDeletionError++;
+                  });
+                });
+
+                if (checkDeletionError > 0) {
+                  callback(500, {
+                    Error:
+                      "User deleted but error encountered while attempting to delete some of the user's checks",
+                  });
+                }
                 callback(200);
               })
               .catch((err) => {
@@ -582,7 +594,10 @@ handlers._checks.delete = function (data, callback) {
                   });
               })
               .catch((err) => {
-                callback(400, { Error: "Could not find the specified user." });
+                callback(400, {
+                  Error:
+                    "Could not find the user who created the check. Hence could not delete the check from the user's check list",
+                });
               });
           } else {
             callback(403, {
