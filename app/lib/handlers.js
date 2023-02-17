@@ -445,38 +445,159 @@ handlers._checks.post = function (data, callback) {
   }
 };
 
-
 // Requierd fields: id
 // Optional data: none
 handlers._checks.get = function (data, callback) {
   const id = data.queryStringObject.get("id");
   if (id?.trim()?.length > 10) {
     // lookup the check
-    read("checks", id).then(checkData => {
-      // Get the tokens from the headers
-      const token = data.headers.token;
+    read("checks", id)
+      .then((checkData) => {
+        // Get the tokens from the headers
+        const token = data.headers.token;
 
-      // verify that the given token is valid for the phone number.
-      handlers._tokens.verifyToken(token, checkData.phone).then((valid) => {
-        if (valid) {
-          callback(200, checkData)
-        } else {
-          callback(403, {
-            error: "Missing required token in header or token is invalid!",
-          });
-        }
+        // verify that the given token is valid for the phone number.
+        handlers._tokens.verifyToken(token, checkData.phone).then((valid) => {
+          if (valid) {
+            callback(200, checkData);
+          } else {
+            callback(403, {
+              error: "Missing required token in header or token is invalid!",
+            });
+          }
+        });
+      })
+      .catch((err) => {
+        callback(404, { Error: "Check Id did not exist" });
       });
-    }).catch(err => {
-      callback(404, {"Error": ""})
-    })
-
-    
   } else {
     callback(400, { error: "Missing required field!" });
   }
 };
-handlers._checks.put = function (data, callback) {};
-handlers._checks.delete = function (data, callback) {};
+
+// Requierd fields: id
+// Optional data: protocol, url, method, successCodes, timeoutSeconds: one must be sent
+handlers._checks.put = function (data, callback) {
+  // Validate inputs
+  let { id, protocol, url, method, successCodes, timeoutSeconds } =
+    data.payload;
+
+  id = id?.trim()?.length > 0 ? id.trim() : false;
+  protocol = ["http", "https"].includes(protocol) ? protocol : false;
+  url = url?.trim()?.length > 0 ? url.trim() : false;
+  method = ["post", "get", "put", "delete"].includes(method) ? method : false;
+  successCodes =
+    successCodes instanceof Array && successCodes.length > 0
+      ? successCodes
+      : false;
+  timeoutSeconds =
+    typeof timeoutSeconds == "number" &&
+    timeoutSeconds % 1 == 0 &&
+    timeoutSeconds >= 1 &&
+    timeoutSeconds <= 5
+      ? timeoutSeconds
+      : false;
+
+  if (id) {
+    if (protocol || url || method || successCodes || timeoutSeconds) {
+      read("checks", id)
+        .then((checkData) => {
+          // Get the tokens from the headers
+          const token = data.headers.token;
+
+          handlers._tokens.verifyToken(token, checkData.phone).then((valid) => {
+            if (valid) {
+              if (protocol) checkData.protocol = protocol;
+              if (url) checkData.url = url;
+              if (method) checkData.method = method;
+              if (successCodes) checkData.successCodes = successCodes;
+              if (timeoutSeconds) checkData.timeoutSeconds = timeoutSeconds;
+
+              update("checks", id, checkData)
+                .then((data) => {
+                  callback(200);
+                })
+                .catch((err) => {
+                  callback(500, { error: "Could not update the check." });
+                });
+            } else {
+              callback(403, {
+                error: "Missing required token in header or token is invalid!",
+              });
+            }
+          });
+        })
+        .catch((err) => {
+          callback(404, { Error: "Check Id did not exist" });
+        });
+    } else {
+      callback(400, { error: "Missing fields to update!" });
+    }
+  } else {
+    callback(400, { error: "Missing required field!" });
+  }
+};
+
+// Requierd fields: id
+// Optional data: none
+handlers._checks.delete = function (data, callback) {
+  let id = data.queryStringObject.get("id");
+
+  id = id?.trim()?.length > 0 ? id.trim() : false;
+
+  if (id) {
+    read("checks", id)
+      .then((checkData) => {
+        // Get the tokens from the headers
+        const token = data.headers.token;
+
+        handlers._tokens.verifyToken(token, checkData.phone).then((valid) => {
+          if (valid) {
+            // lookup the user
+            read("users", checkData.phone)
+              .then((userData) => {
+                // remove the user object
+                deleteFile("checks", id)
+                  .then(() => {
+                    userData.checks = userData.checks.filter(
+                      (check) => check !== id
+                    );
+
+                    update("users", checkData.phone, userData)
+                      .then(() => {
+                        callback(200);
+                      })
+                      .catch(() => {
+                        callback(500, {
+                          error:
+                            "Could not update the user after deleting the check",
+                        });
+                      });
+                    callback(200);
+                  })
+                  .catch((err) => {
+                    callback(500, {
+                      Error: "Could not delete the specified check",
+                    });
+                  });
+              })
+              .catch((err) => {
+                callback(400, { Error: "Could not find the specified user." });
+              });
+          } else {
+            callback(403, {
+              error: "Missing required token in header or token is invalid!",
+            });
+          }
+        });
+      })
+      .catch((err) => {
+        callback(404, { Error: "Check Id did not exist" });
+      });
+  } else {
+    callback(400, { error: "Missing required field!" });
+  }
+};
 
 // Ping handler
 handlers.ping = function (data, callback) {
